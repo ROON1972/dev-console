@@ -518,20 +518,29 @@ function pollCloud(id, workflow) {
 async function downloadAPK(id, workflow) {
   if (STATE.pcOnline) {
     window.location.href = `${STATE.serverUrl}/api/project/${id}/download`;
-    toast('⬇️ Download in corso...');
+    toast('⬇️ Download APK in corso...');
     return;
   }
-  toast('🔍 Cerco APK su GitHub...');
+  // Modalità cloud: scarica dalla Release GitHub
+  toast('🔍 Cerco ultima Release...');
   try {
-    const r1 = await fetch(
-      `https://api.github.com/repos/${STATE.ghUser}/${STATE.ghRepo}/actions/workflows/${workflow}/runs?per_page=1&status=success`,
+    const r = await fetch(
+      `https://api.github.com/repos/${STATE.ghUser}/${STATE.ghRepo}/releases`,
       { headers: ghHeaders() }
     );
-    const d1 = await r1.json();
-    const run = (d1.workflow_runs||[])[0];
-    if (!run) { toast('❌ Nessuna build completata'); return; }
-    window.open(run.html_url, '_blank');
-    toast('📂 Aperta pagina GitHub — scarica l\'APK da Artifacts');
+    const releases = await r.json();
+    if (!releases.length) { toast('❌ Nessuna release — avvia prima una build'); return; }
+    // Trova release per questo progetto dal tag name
+    const tagPrefixes = {
+      'spesa': 'spesa-', 'tessere_fidelity': 'tessere-',
+      'calorie_ricette': 'calorie-', 'gse_app_new': 'gse-'
+    };
+    const prefix = tagPrefixes[id] || id;
+    const release = releases.find(rel => rel.tag_name.startsWith(prefix)) || releases[0];
+    const asset = (release.assets||[])[0];
+    if (!asset) { toast('❌ Nessun APK nella release'); return; }
+    toast('⬇️ Download APK in corso...');
+    window.location.href = asset.browser_download_url;
   } catch(e) { toast('❌ '+e.message); }
 }
 
