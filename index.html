@@ -164,6 +164,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div class="dash-card"><div class="dash-num" id="dash-builds">0</div><div class="dash-label">Build sessione</div></div>
     <div class="dash-card"><div class="dash-num" id="dash-mode-card" style="font-size:18px;">Cloud</div><div class="dash-label">Modalità</div></div>
   </div>
+  <div class="dash-grid" style="grid-template-columns:1fr;">
+    <div class="dash-card" id="actions-minutes-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:13px;font-weight:600;color:var(--text2);">⏱️ GITHUB ACTIONS - MINUTI MESE</div>
+        <span id="actions-warning" style="display:none;font-size:11px;font-weight:600;color:var(--red);">⚠️ ATTENZIONE</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:8px;">
+        <span id="actions-used" style="font-size:28px;font-weight:700;color:var(--accent);">–</span>
+        <span style="font-size:14px;color:var(--text2);">/ 2000 min usati</span>
+        <span id="actions-remaining" style="font-size:14px;font-weight:600;margin-left:auto;"></span>
+      </div>
+      <div class="progress-bar" style="height:8px;margin-bottom:6px;">
+        <div class="progress-fill" id="actions-progress" style="width:0%;background:var(--green);"></div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);" id="actions-reset">Reset mensile: –</div>
+    </div
+  </div>
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
     <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text2);">STATO PROGETTI</div>
     <div id="dash-project-list"></div>
@@ -637,12 +654,68 @@ function appendLog(id, text, cls='') {
   log.scrollTop = log.scrollHeight;
 }
 
+// ── Actions Minutes ──────────────────────────────────────────────────────────
+async function loadActionsMinutes() {
+  try {
+    const r = await fetch(
+      'https://api.github.com/repos/ROON1972/progetti/actions/cache/usage',
+      { headers: ghHeaders() }
+    );
+    // Usa l'endpoint corretto per i minuti
+    const r2 = await fetch(
+      'https://api.github.com/users/ROON1972/settings/billing/actions',
+      { headers: ghHeaders() }
+    );
+    if (r2.status !== 200) {
+      // Prova endpoint alternativo
+      const r3 = await fetch(
+        'https://api.github.com/repos/ROON1972/progetti/actions/workflows',
+        { headers: ghHeaders() }
+      );
+      document.getElementById('actions-used').textContent = '–';
+      document.getElementById('actions-remaining').textContent = 'N/D';
+      return;
+    }
+    const data = await r2.json();
+    const used = data.total_minutes_used || 0;
+    const limit = data.included_minutes || 2000;
+    const remaining = limit - used;
+    const pct = Math.min((used / limit) * 100, 100);
+
+    document.getElementById('actions-used').textContent = used;
+    document.getElementById('actions-remaining').textContent = `${remaining} rimanenti`;
+
+    const bar = document.getElementById('actions-progress');
+    bar.style.width = pct + '%';
+    if (pct > 80) {
+      bar.style.background = 'var(--red)';
+      document.getElementById('actions-warning').style.display = 'inline';
+      document.getElementById('actions-warning').textContent = '⚠️ QUASI ESAURITI!';
+    } else if (pct > 60) {
+      bar.style.background = 'var(--yellow)';
+      document.getElementById('actions-warning').style.display = 'inline';
+      document.getElementById('actions-warning').textContent = '⚠️ Oltre il 60%';
+    } else {
+      bar.style.background = 'var(--green)';
+    }
+
+    if (data.next_billing_cycle_start) {
+      const reset = new Date(data.next_billing_cycle_start);
+      document.getElementById('actions-reset').textContent = 
+        `Reset mensile: ${reset.toLocaleDateString('it-IT')}`;
+    }
+  } catch(e) {
+    console.log('Actions minutes error:', e);
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────
 async function init() {
   document.getElementById('server-url').value = STATE.serverUrl;
   document.getElementById('gh-token').value   = STATE.ghToken;
   document.getElementById('info-url').textContent = STATE.serverUrl;
   renderDashboard();
+  loadActionsMinutes();
   const online = await checkPC();
   if (!online) setModeBanner('cloud');
 }
