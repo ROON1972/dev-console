@@ -715,6 +715,8 @@ async function init() {
   document.getElementById('gh-token').value   = STATE.ghToken;
   document.getElementById('info-url').textContent = STATE.serverUrl;
   renderDashboard();
+  renderProjects();
+  renderGithub();
   loadActionsMinutes();
   const online = await checkPC();
   if (!online) setModeBanner('cloud');
