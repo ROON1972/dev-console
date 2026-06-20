@@ -548,16 +548,37 @@ async function downloadAPK(id, workflow) {
     );
     const releases = await r.json();
     if (!releases.length) { toast('❌ Nessuna release — avvia prima una build'); return; }
-    // Trova release per questo progetto dal tag name
-    const tagPrefixes = {
-      'spesa': 'spesa-', 'tessere_fidelity': 'tessere-',
-      'calorie_ricette': 'calorie-', 'gse_app_new': 'gse-'
+
+    // Mappa id progetto → tag esatto della release più recente
+    const tagMap = {
+      'spesa':            'spesa-latest',
+      'tessere_fidelity': 'tessere-latest',
+      'calorie_ricette':  'calorie_ricette-latest',
+      'gse_app_new':      'gse_app_new-latest',
+      'trail_guide':      'trail-latest'
     };
-    const prefix = tagPrefixes[id] || id;
-    const release = releases.find(rel => rel.tag_name.startsWith(prefix)) || releases[0];
-    const asset = (release.assets||[])[0];
-    if (!asset) { toast('❌ Nessun APK nella release'); return; }
-    toast('⬇️ Download APK in corso...');
+    const targetTag = tagMap[id];
+
+    // Cerca prima per tag esatto, poi per contenuto nel nome
+    let release = releases.find(rel => rel.tag_name === targetTag);
+    if (!release) {
+      // Fallback: cerca per nome progetto nel titolo release
+      const nameMap = {
+        'spesa': 'spesa', 'tessere_fidelity': 'tessere', 
+        'calorie_ricette': 'calorie', 'gse_app_new': 'gse',
+        'trail_guide': 'trail'
+      };
+      const keyword = nameMap[id] || id;
+      release = releases.find(rel => rel.tag_name.toLowerCase().includes(keyword) && rel.assets?.length > 0);
+    }
+
+    if (!release || !release.assets?.length) {
+      toast('❌ Nessun APK trovato per ' + id);
+      return;
+    }
+
+    const asset = release.assets[0];
+    toast('⬇️ Download ' + release.name + '...');
     window.location.href = asset.browser_download_url;
   } catch(e) { toast('❌ '+e.message); }
 }
