@@ -153,6 +153,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="tab active" onclick="switchTab('dashboard')">📊 Dashboard</div>
   <div class="tab" onclick="switchTab('projects')">📱 Progetti</div>
   <div class="tab" onclick="switchTab('github')">☁️ GitHub</div>
+  <div class="tab" onclick="switchTab('sync')">🔄 Sync</div>
   <div class="tab" onclick="switchTab('settings')">⚙️ Config</div>
 </div>
 
@@ -237,6 +238,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="nav-item active" onclick="switchTab('dashboard')" id="nav-dashboard"><div class="nav-icon">📊</div><span>Dashboard</span></div>
   <div class="nav-item" onclick="switchTab('projects')" id="nav-projects"><div class="nav-icon">📱</div><span>Progetti</span></div>
   <div class="nav-item" onclick="switchTab('github')" id="nav-github"><div class="nav-icon">☁️</div><span>GitHub</span></div>
+  <div class="nav-item" onclick="switchTab('sync')" id="nav-sync"><div class="nav-icon">🔄</div><span>Sync</span></div>
   <div class="nav-item" onclick="switchTab('settings')" id="nav-settings"><div class="nav-icon">⚙️</div><span>Config</span></div>
 </div>
 
@@ -297,6 +299,7 @@ function switchTab(name) {
   const idx = ['dashboard','projects','github','settings'].indexOf(name);
   if (tabs[idx]) tabs[idx].classList.add('active');
   if (name==='projects') renderProjects();
+  if (name==='sync') refreshSync();
   if (name==='github')   renderGithub();
   if (name==='settings') {
     document.getElementById('server-url').value = STATE.serverUrl;
@@ -534,11 +537,8 @@ function pollCloud(id, workflow) {
 
 // ── Download ──────────────────────────────────────────────────────────────
 async function downloadAPK(id, workflow) {
-  if (STATE.pcOnline) {
-    window.location.href = `${STATE.serverUrl}/api/project/${id}/download`;
-    toast('⬇️ Download APK in corso...');
-    return;
-  }
+  // Sempre da GitHub Release — il server LAN non ha gli APK delle build cloud
+  toast('🔍 Cerco ultima Release su GitHub...');
   // Modalità cloud: scarica dalla Release GitHub
   toast('🔍 Cerco ultima Release...');
   try {
@@ -730,6 +730,44 @@ async function loadActionsMinutes() {
   }
 }
 
+// ── Sync Status ──────────────────────────────────────────────────────────────
+async function refreshSync() {
+  if (!STATE.pcOnline) {
+    const el = document.getElementById('sync-result');
+    if (el) el.textContent = '⚠️ PC non raggiungibile — sync non disponibile';
+    return;
+  }
+  try {
+    const data = await apiPC('/api/sync/status');
+    const resultEl = document.getElementById('sync-result');
+    const lastEl   = document.getElementById('sync-last');
+    const nextEl   = document.getElementById('sync-next');
+    const filesEl  = document.getElementById('sync-files');
+    if (!resultEl) return;
+
+    resultEl.textContent = data.last_result || '–';
+    resultEl.style.color = data.in_progress ? 'var(--yellow)' :
+      data.last_result?.includes('✅') ? 'var(--green)' :
+      data.last_result?.includes('⚠️') || data.last_result?.includes('❌') ? 'var(--red)' : 'var(--text)';
+
+    if (data.last_sync) {
+      const d = new Date(data.last_sync);
+      if (lastEl) lastEl.textContent = d.toLocaleTimeString('it-IT', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    }
+    if (data.next_sync) {
+      const d = new Date(data.next_sync);
+      if (nextEl) nextEl.textContent = d.toLocaleTimeString('it-IT', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    }
+    const files = data.files_updated || [];
+    if (filesEl) filesEl.innerHTML = files.length > 0 ?
+      files.map(f => `<div style="padding:3px 0;border-bottom:1px solid var(--border);">📄 ${f}</div>`).join('') :
+      'Nessun file aggiornato nell\'ultimo sync';
+  } catch(e) {
+    const el = document.getElementById('sync-result');
+    if (el) el.textContent = '❌ ' + e.message;
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────
 async function init() {
   document.getElementById('server-url').value = STATE.serverUrl;
@@ -745,6 +783,7 @@ async function init() {
 
 init();
 setInterval(checkPC, 30000);
+setInterval(() => { if (STATE.pcOnline) refreshSync(); }, 30000);
 </script>
 </body>
 </html>
