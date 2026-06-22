@@ -550,12 +550,12 @@ async function downloadAPK(id, workflow) {
     if (!releases.length) { toast('❌ Nessuna release — avvia prima una build'); return; }
 
     // Mappa id progetto → tag esatto della release più recente
-    const tagMap = {
+        const tagMap = {
       'spesa':            'spesa-latest',
-      'tessere_fidelity': 'tessere-latest',
+      'tessere_fidelity': 'tessere_fidelity-latest',
       'calorie_ricette':  'calorie_ricette-latest',
       'gse_app_new':      'gse_app_new-latest',
-      'trail_guide':      'trail-latest'
+      'trail_guide':      'trail_guide-latest'
     };
     const targetTag = tagMap[id];
 
