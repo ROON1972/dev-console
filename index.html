@@ -732,39 +732,84 @@ async function loadActionsMinutes() {
 
 // ── Sync Status ──────────────────────────────────────────────────────────────
 async function refreshSync() {
-  if (!STATE.pcOnline) {
-    const el = document.getElementById('sync-result');
-    if (el) el.textContent = '⚠️ PC non raggiungibile — sync non disponibile';
-    return;
+  const resultEl = document.getElementById('sync-result');
+  const lastEl   = document.getElementById('sync-last');
+  const nextEl   = document.getElementById('sync-next');
+  const filesEl  = document.getElementById('sync-files');
+  const histEl   = document.getElementById('sync-history');
+
+  // Prova prima via server LAN
+  if (STATE.pcOnline) {
+    try {
+      const data = await apiPC('/api/sync/status');
+      if (resultEl) {
+        resultEl.textContent = data.last_result || '–';
+        resultEl.style.color = data.in_progress ? 'var(--yellow)' :
+          data.last_result?.includes('✅') ? 'var(--green)' :
+          (data.last_result?.includes('⚠️') || data.last_result?.includes('❌')) ? 'var(--red)' : 'var(--text)';
+      }
+      if (data.last_sync && lastEl) {
+        const d = new Date(data.last_sync);
+        lastEl.textContent = d.toLocaleTimeString('it-IT', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      }
+      if (data.next_sync && nextEl) {
+        const d = new Date(data.next_sync);
+        nextEl.textContent = d.toLocaleTimeString('it-IT', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      }
+      const files = data.files_updated || [];
+      if (filesEl) filesEl.innerHTML = files.length > 0 ?
+        files.map(f => `<div style="padding:3px 0;border-bottom:1px solid var(--border);">📄 ${f}</div>`).join('') :
+        'Nessun file aggiornato nell\'ultimo sync';
+    } catch(e) {
+      if (resultEl) resultEl.textContent = '❌ ' + e.message;
+    }
   }
+
+  // Leggi sempre storico da GitHub (funziona anche senza PC)
   try {
-    const data = await apiPC('/api/sync/status');
-    const resultEl = document.getElementById('sync-result');
-    const lastEl   = document.getElementById('sync-last');
-    const nextEl   = document.getElementById('sync-next');
-    const filesEl  = document.getElementById('sync-files');
-    if (!resultEl) return;
+    const r = await fetch(
+      `https://api.github.com/repos/${STATE.ghUser}/${STATE.ghRepo}/contents/_console/sync_log.json`,
+      { headers: ghHeaders() }
+    );
+    if (r.ok) {
+      const d = await r.json();
+      const logs = JSON.parse(atob(d.content.replace(/\n/g,'')));
+      
+      if (histEl && logs.length > 0) {
+        histEl.innerHTML = logs.map((entry, i) => {
+          const ts = new Date(entry.timestamp);
+          const timeStr = ts.toLocaleTimeString('it-IT', {hour:'2-digit',minute:'2-digit'});
+          const dateStr = ts.toLocaleDateString('it-IT', {day:'2-digit',month:'2-digit'});
+          const color = entry.result?.includes('✅') ? 'var(--green)' : 
+                        entry.result?.includes('⚠️') ? 'var(--yellow)' : 'var(--red)';
+          return `<div style="padding:8px 0;border-bottom:1px solid var(--border);">
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+              <span style="color:${color};font-size:13px;font-weight:600;">${entry.result}</span>
+              <span style="color:var(--text3);font-size:11px;">${dateStr} ${timeStr}</span>
+            </div>
+            ${entry.files?.length > 0 ? 
+              `<div style="font-size:11px;color:var(--text2);">${entry.files.map(f=>`📄 ${f}`).join(' · ')}</div>` : 
+              '<div style="font-size:11px;color:var(--text3);">Nessun file modificato</div>'
+            }
+          </div>`;
+        }).join('');
+      } else if (histEl) {
+        histEl.innerHTML = '<div style="color:var(--text3);font-size:12px;">Nessun sync registrato ancora</div>';
+      }
 
-    resultEl.textContent = data.last_result || '–';
-    resultEl.style.color = data.in_progress ? 'var(--yellow)' :
-      data.last_result?.includes('✅') ? 'var(--green)' :
-      data.last_result?.includes('⚠️') || data.last_result?.includes('❌') ? 'var(--red)' : 'var(--text)';
-
-    if (data.last_sync) {
-      const d = new Date(data.last_sync);
-      if (lastEl) lastEl.textContent = d.toLocaleTimeString('it-IT', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      // Se PC offline, mostra info dall'ultimo log
+      if (!STATE.pcOnline && logs.length > 0) {
+        const last = logs[0];
+        if (resultEl) { resultEl.textContent = last.result; resultEl.style.color = 'var(--text2)'; }
+        if (lastEl) {
+          const d = new Date(last.timestamp);
+          lastEl.textContent = d.toLocaleTimeString('it-IT', {hour:'2-digit',minute:'2-digit',second:'2-digit'}) + ' (PC offline)';
+        }
+        if (nextEl) nextEl.textContent = 'PC offline';
+      }
     }
-    if (data.next_sync) {
-      const d = new Date(data.next_sync);
-      if (nextEl) nextEl.textContent = d.toLocaleTimeString('it-IT', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    }
-    const files = data.files_updated || [];
-    if (filesEl) filesEl.innerHTML = files.length > 0 ?
-      files.map(f => `<div style="padding:3px 0;border-bottom:1px solid var(--border);">📄 ${f}</div>`).join('') :
-      'Nessun file aggiornato nell\'ultimo sync';
   } catch(e) {
-    const el = document.getElementById('sync-result');
-    if (el) el.textContent = '❌ ' + e.message;
+    console.log('Sync log GitHub error:', e);
   }
 }
 
