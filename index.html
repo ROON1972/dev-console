@@ -154,6 +154,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="tab" onclick="switchTab('projects')">📱 Progetti</div>
   <div class="tab" onclick="switchTab('github')">☁️ GitHub</div>
   <div class="tab" onclick="switchTab('sync')">🔄 Sync</div>
+  <div class="tab" onclick="switchTab('brain')">💬 Brain</div>
   <div class="tab" onclick="switchTab('settings')">⚙️ Config</div>
 </div>
 
@@ -239,6 +240,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="nav-item" onclick="switchTab('projects')" id="nav-projects"><div class="nav-icon">📱</div><span>Progetti</span></div>
   <div class="nav-item" onclick="switchTab('github')" id="nav-github"><div class="nav-icon">☁️</div><span>GitHub</span></div>
   <div class="nav-item" onclick="switchTab('sync')" id="nav-sync"><div class="nav-icon">🔄</div><span>Sync</span></div>
+  <div class="nav-item" onclick="switchTab('brain')" id="nav-brain"><div class="nav-icon">💬</div><span>Brain</span></div>
   <div class="nav-item" onclick="switchTab('settings')" id="nav-settings"><div class="nav-icon">⚙️</div><span>Config</span></div>
 </div>
 
@@ -301,6 +303,7 @@ function switchTab(name) {
   if (tabs[idx]) tabs[idx].classList.add('active');
   if (name==='projects') renderProjects();
   if (name==='sync') refreshSync();
+  if (name==='brain') loadBrainstorming();
   if (name==='github')   renderGithub();
   if (name==='settings') {
     document.getElementById('server-url').value = STATE.serverUrl;
@@ -811,6 +814,38 @@ async function refreshSync() {
     }
   } catch(e) {
     console.log('Sync log GitHub error:', e);
+  }
+}
+
+// ── Brainstorming ────────────────────────────────────────────────────────────
+async function loadBrainstorming() {
+  const statusEl  = document.getElementById('brain-status');
+  const contentEl = document.getElementById('brain-content');
+  try {
+    // Leggi SESSIONE_ATTIVA.md da GitHub
+    const r = await fetch(
+      `https://api.github.com/repos/${STATE.ghUser}/${STATE.ghRepo}/contents/_brainstorming/SESSIONE_ATTIVA.md`,
+      { headers: ghHeaders() }
+    );
+    if (!r.ok) { statusEl.textContent = '❌ Sessione non trovata'; return; }
+    const d = await r.json();
+    const text = atob(d.content.replace(/\n/g, ''));
+    
+    // Estrai info sessione
+    const titleMatch = text.match(/# 🗣️ (.+)/);
+    const statoMatch = text.match(/\*\*Stato:\*\* (.+)/);
+    const temaMatch  = text.match(/\*\*Tema:\*\* (.+)/);
+    
+    if (statusEl) {
+      statusEl.innerHTML = `
+        <div class="info-row"><span class="info-label">Sessione</span><span class="info-value">${titleMatch?.[1] || '–'}</span></div>
+        <div class="info-row"><span class="info-label">Tema</span><span class="info-value">${temaMatch?.[1] || '–'}</span></div>
+        <div class="info-row"><span class="info-label">Stato</span><span class="info-value">${statoMatch?.[1] || '–'}</span></div>
+      `;
+    }
+    if (contentEl) contentEl.textContent = text;
+  } catch(e) {
+    if (statusEl) statusEl.textContent = '❌ ' + e.message;
   }
 }
 
